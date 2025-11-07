@@ -7,34 +7,54 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
+      # 1️⃣ Checkout 仓库
       - name: Checkout
         uses: actions/checkout@v3
 
+      # 2️⃣ 安装依赖
       - name: Install dependencies
         run: |
           sudo apt update
           sudo apt install -y unzip python3 gawk g++ build-essential \
             libncurses5-dev libncursesw5-dev zlib1g-dev gettext \
-            libssl-dev xsltproc rsync wget
+            libssl-dev xsltproc rsync wget git
 
-      - name: Download OpenWrt SDK (armvirt/64)
+      # 3️⃣ 下载稳定 OpenWrt SDK (23.05.3 armvirt/64)
+      - name: Download OpenWrt SDK
         run: |
-          wget https://downloads.openwrt.org/snapshots/targets/armvirt/64/openwrt-sdk-armvirt-64_gcc-13.2.0_musl.Linux-x86_64.tar.xz
-          tar -xf openwrt-sdk-armvirt-64_gcc-13.2.0_musl.Linux-x86_64.tar.xz
+          wget https://downloads.openwrt.org/releases/23.05.3/targets/armvirt/64/openwrt-sdk-23.05.3-armvirt-64_gcc-12.3.0_musl.Linux-x86_64.tar.xz
+          tar -xf openwrt-sdk-23.05.3-armvirt-64_gcc-12.3.0_musl.Linux-x86_64.tar.xz
           mv openwrt-sdk-* sdk
 
-      - name: Copy package
+      # 4️⃣ 拷贝 gecoosac 插件到 SDK
+      - name: Copy gecoosac package
         run: |
-          cp -r . sdk/package/gecoosac
+          cp -r package/gecoosac sdk/package/
 
-      - name: Build
-        working-directory: sdk
+      # 5️⃣ 生成 minimal .config 自动启用插件
+      - name: Generate minimal config
         run: |
+          cat > sdk/.config <<EOF
+CONFIG_TARGET_armvirt_64=y
+CONFIG_PACKAGE_luci-app-gecoosac=y
+EOF
+          cd sdk
+          make oldconfig
+
+      # 6️⃣ 更新 feeds
+      - name: Update feeds
+        run: |
+          cd sdk
           ./scripts/feeds update -a
           ./scripts/feeds install -a
-          make defconfig
+
+      # 7️⃣ 编译 gecoosac
+      - name: Build gecoosac
+        run: |
+          cd sdk
           make package/gecoosac/compile V=s
 
+      # 8️⃣ 上传 IPK
       - name: Upload IPK
         uses: actions/upload-artifact@v3
         with:
