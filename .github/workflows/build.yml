@@ -1,60 +1,50 @@
-name: Build OpenWrt IPK Packages
+name: Build OpenWrt Gecoosac Plugin for ARM64
 
 on:
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
-  workflow_dispatch:
+  workflow_dispatch:  # 手动触发构建
 
 jobs:
   build:
-    runs-on: ubuntu-latest
-
+    runs-on: ubuntu-latest  # 使用 Ubuntu 环境进行编译
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v4  # 检出仓库代码
 
       - name: Install dependencies
         run: |
           sudo apt update
-          sudo apt install -y build-essential ccache ecj fastjar file g++ gawk \
-            gettext git java-propose-classpath java-wrappers jq libelf-dev libffi-dev \
-            libncurses5-dev libncursesw5-dev libssl-dev python3 python3-distutils \
-            python3-setuptools python3-dev unzip wget python3-pyelftools \
-            rsync subversion swig time xsltproc zlib1g-dev zstd
+          sudo apt install -y build-essential ccache ecj fastjar file g++ gawk gettext git java-propose-classpath java-wrappers jq libelf-dev libffi-dev libncurses5-dev libncursesw5-dev libssl-dev python3 python3-build python3-installer python3-mdx python3-setuptools python3-venv unzip wget python3-dev zlib1g-dev swig time xsltproc upx-ucl
 
-      - name: Download SDK
+      - name: Clone OpenWrt source
         run: |
-          wget https://downloads.openwrt.org/snapshots/targets/qualcommax/ipq60xx/openwrt-sdk-qualcommax-ipq60xx_gcc-14.3.0_musl.Linux-x86_64.tar.zst -O sdk.tar.zst
-          zstd -d sdk.tar.zst
-          tar xf sdk.tar
-          mv openwrt-sdk-* sdk
+          git clone https://git.openwrt.org/openwrt/openwrt.git -b openwrt-23.05
+          cd openwrt
 
-      - name: Prepare feeds
+      - name: Add Gecoosac plugin
         run: |
-          cd sdk
-          cp feeds.conf.default feeds.conf
-          mkdir -p package/custom
-          cp -r $GITHUB_WORKSPACE/* package/custom/
-          echo "src-link custom $PWD/package/custom" >> feeds.conf
+          cd openwrt
+          git clone https://github.com/lwb1978/openwrt-gecoosac package/openwrt-gecoosac
+
+      - name: Update and install feeds
+        run: |
+          cd openwrt
           ./scripts/feeds update -a
-          ./scripts/feeds install -a -p custom
+          ./scripts/feeds install -a
 
-      - name: Build packages
+      - name: Load custom configuration
         run: |
-          cd sdk
-          make package/gecoosac/compile V=s -j$(nproc) IGNORE_ERRORS=1 || true
-          make package/luci-app-gecoosac/compile V=s -j$(nproc) IGNORE_ERRORS=1 || true
+          cd openwrt
+          # 假设你的 .config 文件已 push 到仓库根目录，复制到 openwrt 目录
+          cp ../.config .config || true  # 如果有自定义 .config
+          make defconfig  # 应用默认配置
 
-      - name: Collect IPKs
+      - name: Compile Plugin
         run: |
-          cd sdk
-          mkdir ../artifacts
-          find bin/packages -type f -name "*.ipk" -exec cp {} ../artifacts/ \;
+          cd openwrt
+          make package/luci-app-gecoosac/compile V=s -j$(nproc)  # 只编译 gecoosac 插件
 
-      - name: Upload artifacts
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ipk-packages
-          path: artifacts/
+          name: gecoosac-plugin-arm64
+          path: openwrt/bin/packages/**  # 上传生成的 IPK 包
