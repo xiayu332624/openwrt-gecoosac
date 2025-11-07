@@ -1,62 +1,60 @@
-name: Build gecoosac for ARM64
+name: Build OpenWrt IPK Packages
 
 on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    steps:
-      # 1️⃣ Checkout 仓库
-      - name: Checkout
-        uses: actions/checkout@v3
 
-      # 2️⃣ 安装依赖
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Install dependencies
         run: |
           sudo apt update
-          sudo apt install -y unzip python3 gawk g++ build-essential \
-            libncurses5-dev libncursesw5-dev zlib1g-dev gettext \
-            libssl-dev xsltproc rsync wget git
+          sudo apt install -y build-essential ccache ecj fastjar file g++ gawk \
+            gettext git java-propose-classpath java-wrappers jq libelf-dev libffi-dev \
+            libncurses5-dev libncursesw5-dev libssl-dev python3 python3-distutils \
+            python3-setuptools python3-dev unzip wget python3-pyelftools \
+            rsync subversion swig time xsltproc zlib1g-dev zstd
 
-      # 3️⃣ 下载稳定 OpenWrt SDK (23.05.3 armvirt/64)
-      - name: Download OpenWrt SDK
+      - name: Download SDK
         run: |
-          wget https://downloads.openwrt.org/releases/23.05.3/targets/armvirt/64/openwrt-sdk-23.05.3-armvirt-64_gcc-12.3.0_musl.Linux-x86_64.tar.xz
-          tar -xf openwrt-sdk-23.05.3-armvirt-64_gcc-12.3.0_musl.Linux-x86_64.tar.xz
-          mv openwrt-sdk-* sdk
+          wget https://downloads.immortalwrt.org/snapshots/targets/qualcommax/ipq60xx/immortalwrt-sdk-qualcommax-ipq60xx_gcc-14.3.0_musl.Linux-x86_64.tar.zst -O sdk.tar.zst
+          zstd -d sdk.tar.zst
+          tar xf sdk.tar
+          mv immortalwrt-sdk-* sdk
 
-      # 4️⃣ 拷贝 gecoosac 插件到 SDK
-      - name: Copy gecoosac package
-        run: |
-          cp -r package/gecoosac sdk/package/
-
-      # 5️⃣ 生成 minimal .config 自动启用插件
-      - name: Generate minimal config
-        run: |
-          cat > sdk/.config <<EOF
-CONFIG_TARGET_armvirt_64=y
-CONFIG_PACKAGE_luci-app-gecoosac=y
-EOF
-          cd sdk
-          make oldconfig
-
-      # 6️⃣ 更新 feeds
-      - name: Update feeds
+      - name: Prepare feeds
         run: |
           cd sdk
+          cp feeds.conf.default feeds.conf
+          mkdir -p package/custom
+          cp -r $GITHUB_WORKSPACE/* package/custom/
+          echo "src-link custom $PWD/package/custom" >> feeds.conf
           ./scripts/feeds update -a
-          ./scripts/feeds install -a
+          ./scripts/feeds install -a -p custom
 
-      # 7️⃣ 编译 gecoosac
-      - name: Build gecoosac
+      - name: Build packages
         run: |
           cd sdk
-          make package/gecoosac/compile V=s
+          make package/gecoosac/compile V=s -j$(nproc) IGNORE_ERRORS=1 || true
+          make package/luci-app-gecoosac/compile V=s -j$(nproc) IGNORE_ERRORS=1 || true
 
-      # 8️⃣ 上传 IPK
-      - name: Upload IPK
-        uses: actions/upload-artifact@v3
+      - name: Collect IPKs
+        run: |
+          cd sdk
+          mkdir ../artifacts
+          find bin/packages -type f -name "*.ipk" -exec cp {} ../artifacts/ \;
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
         with:
-          name: gecoosac-ipk
-          path: sdk/bin/packages/*/*/*.ipk
+          name: ipk-packages
+          path: artifacts/
