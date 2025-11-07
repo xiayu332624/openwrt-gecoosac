@@ -26,10 +26,10 @@ jobs:
 
       - name: Download SDK
         run: |
-          wget https://downloads.immortalwrt.org/snapshots/targets/qualcommax/ipq60xx/immortalwrt-sdk-qualcommax-ipq60xx_gcc-14.3.0_musl.Linux-x86_64.tar.zst -O sdk.tar.zst
+          wget https://downloads.openwrt.org/snapshots/targets/qualcommax/ipq60xx/openwrt-sdk-qualcommax-ipq60xx_gcc-14.3.0_musl.Linux-x86_64.tar.zst -O sdk.tar.zst
           zstd -d sdk.tar.zst
           tar xf sdk.tar
-          mv immortalwrt-sdk-* sdk
+          mv openwrt-sdk-* sdk
 
       - name: Prepare feeds
         run: |
