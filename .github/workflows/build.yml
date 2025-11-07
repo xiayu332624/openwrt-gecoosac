@@ -1,0 +1,42 @@
+name: Build gecoosac for ARM64
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y unzip python3 gawk g++ build-essential \
+            libncurses5-dev libncursesw5-dev zlib1g-dev gettext \
+            libssl-dev xsltproc rsync wget
+
+      - name: Download OpenWrt SDK (armvirt/64)
+        run: |
+          wget https://downloads.openwrt.org/snapshots/targets/armvirt/64/openwrt-sdk-armvirt-64_gcc-13.2.0_musl.Linux-x86_64.tar.xz
+          tar -xf openwrt-sdk-armvirt-64_gcc-13.2.0_musl.Linux-x86_64.tar.xz
+          mv openwrt-sdk-* sdk
+
+      - name: Copy package
+        run: |
+          cp -r . sdk/package/gecoosac
+
+      - name: Build
+        working-directory: sdk
+        run: |
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+          make defconfig
+          make package/gecoosac/compile V=s
+
+      - name: Upload IPK
+        uses: actions/upload-artifact@v3
+        with:
+          name: gecoosac-ipk
+          path: sdk/bin/packages/*/*/*.ipk
